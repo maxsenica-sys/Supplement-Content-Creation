@@ -2801,84 +2801,49 @@ function rs_showResult(data) {
   rc.style.display = 'block';
 
   const studies = data.studies || [];
+
+  // Build studies HTML — title + authors + link only
   const studiesHTML = studies.map((s, i) => `
-    <div class="study-card">
-      <div class="study-card-header">
-        <div class="study-num">${i + 1}</div>
-        <div class="study-title-wrap">
-          <div class="study-title">${s.title || 'Study ' + (i+1)}</div>
-          <div class="study-authors">${s.authors || ''} ${s.year ? '· ' + s.year : ''}</div>
-          <div class="study-journal">${s.journal || ''}</div>
-          ${s.institution ? `<div style="font-size:11px;color:#6a8a6a;margin-top:2px">🌐 ${s.institution}</div>` : ''}
-          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-            ${s.study_type ? `<span style="font-size:10px;font-weight:600;font-family:'Syne',sans-serif;padding:2px 8px;border-radius:4px;background:rgba(77,159,255,0.1);color:#4d9fff;border:1px solid rgba(77,159,255,0.2)">${s.study_type}</span>` : ''}
-            ${s.sample_size ? `<span style="font-size:10px;font-weight:600;font-family:'Syne',sans-serif;padding:2px 8px;border-radius:4px;background:rgba(200,241,53,0.08);color:#a0c020;border:1px solid rgba(200,241,53,0.15)">n=${s.sample_size}</span>` : ''}
-          </div>
-        </div>
-      </div>
-      <div class="study-card-body">
-        <div class="study-section-label">Key Finding</div>
-        <div class="study-finding">${(s.key_finding || '').replace(/(\d+\.?\d*\s*%|\d+\.?\d*\s*kg|\d+\.?\d*\s*[xX]|\d+\.?\d*\s*g\b)/gi, '<strong>$1</strong>')}</div>
-        ${s.stat_highlight ? `<div class="study-section-label">📊 Measurable Result</div><div class="study-finding"><strong style="color:var(--accent);font-size:16px">${s.stat_highlight}</strong></div>` : ''}
-        ${s.why_high_quality ? `<div style="font-size:11px;color:#6a8a5a;padding:7px 10px;background:rgba(100,160,60,0.06);border-radius:6px;border-left:2px solid rgba(100,160,60,0.3);margin-bottom:12px">✓ <em>${s.why_high_quality}</em></div>` : ''}
-        ${s.hook_line ? `<div class="study-hook-box"><div class="study-section-label" style="margin-bottom:4px">🎬 Video Hook From This Study</div><div class="study-hook"><strong>"</strong>${s.hook_line}<strong>"</strong></div></div>` : ''}
-      </div>
-      <div class="study-card-footer">
-        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
-          ${s.pubmed_url ? `<a class="study-link" href="${s.pubmed_url}" target="_blank">🔗 PubMed: ${s.pubmed_url}</a>` : ''}
-          ${s.doi && s.doi !== s.pubmed_url ? `<a class="study-link" href="${s.doi}" target="_blank" style="color:#8ab0ff">📄 DOI: ${s.doi}</a>` : ''}
-          ${!s.pubmed_url && !s.doi ? '<span style="font-size:12px;color:var(--muted)">Search PubMed for full text</span>' : ''}
-        </div>
-        <div class="study-actions">
-          <button class="action-btn" onclick="rs_copyStudy(this, ${i})">Copy hook</button>
-          <button class="action-btn" onclick="rs_copyLink(this, '${s.pubmed_url || s.doi || ''}')">Copy link</button>
-        </div>
+    <div class="study-card" style="margin-bottom:10px;">
+      <div class="study-card-body" style="padding:14px 18px;">
+        <div style="font-size:13px;font-weight:600;color:#e0e0e0;line-height:1.4;margin-bottom:6px;">${s.title || ''}</div>
+        <div style="font-size:11px;color:#666;margin-bottom:8px;">${s.authors || ''} &middot; ${s.year || ''}</div>
+        ${s.pubmed_url ? `<a class="study-link" href="${s.pubmed_url}" target="_blank" style="font-size:12px;">&#x1F517; ${s.pubmed_url}</a>` : '<span style="font-size:11px;color:#555;">Search PubMed for full text</span>'}
       </div>
     </div>
   `).join('');
 
-  const safetyColor = {
-    'Safe': 'var(--accent)',
-    'Generally Safe': '#adf080',
-    'Use With Caution': '#ffa040',
-    'Limited Data': 'var(--muted)'
-  }[data.safety_rating] || 'var(--muted)';
-
   rc.innerHTML = `
-    <div class="result-header">
-      <div>
-        <div class="result-supplement-name">${data.supplement || data._supplement}</div>
-        <div class="result-meta">
-          <span class="meta-tag tag-studies">${studies.length} RCTs / reviews</span>
-          <span class="meta-tag tag-safety" style="color:${safetyColor};border-color:${safetyColor}20;background:${safetyColor}10">${data.safety_rating || 'See studies'}</span>
-          ${data.evidence_grade ? `<span class="meta-tag" style="background:rgba(160,100,255,0.1);color:#c090ff;border:1px solid rgba(160,100,255,0.2)">${data.evidence_grade}</span>` : ''}
-        </div>
-      </div>
-      <button class="copy-all-btn" onclick="rs_copyAllHooks()">Copy all hooks ↗</button>
+    <div style="margin-bottom:20px;">
+      <div style="font-size:10px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:8px;">VIDEO TITLE</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#fff;letter-spacing:0.04em;line-height:1.1;">${data.video_title || 'Everything about ' + data.supplement + ' in one breath'}</div>
     </div>
 
-    <div class="script-prompt-box">
-      <div class="script-prompt-label">🎬 Your Video Script Starting Point</div>
-      <div class="script-prompt-text">
-        <strong>Hook:</strong> "${data.video_hook || ''}"<br><br>
-        <strong>Key insight (athlete framing):</strong> ${data.script_insight || data.overview || ''}
-      </div>
+    <div style="background:linear-gradient(135deg,#0f1a03,#0d0d0d);border:1px solid rgba(200,241,53,0.25);border-radius:14px;padding:20px 22px;margin-bottom:20px;">
+      <div style="font-size:10px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:14px;">&#x1F3A4; ONE BREATH SCRIPT</div>
+      <div style="font-size:11px;color:#777;font-family:'DM Mono',monospace;letter-spacing:0.1em;margin-bottom:10px;">*BIG GASP FOR AIR*</div>
+      <div style="font-size:15px;line-height:1.7;color:#e8e8e8;font-style:italic;margin-bottom:14px;">"${data.one_breath_script || ''}"</div>
+      <div style="font-size:11px;color:#777;font-family:'DM Mono',monospace;letter-spacing:0.1em;margin-bottom:10px;">*GASP*</div>
+      <div style="font-size:14px;font-weight:700;color:#c8f135;">"${data.cta || 'Follow SUPPSTACKD for more tips like this'}"</div>
     </div>
 
-    <div class="safety-box">
-      <div class="study-section-label">Athlete Quick Reference</div>
-      <div class="safety-grid">
-        <div class="safety-item"><div class="safety-key">Common Dose</div><div class="safety-val">${data.common_dose || '—'}</div></div>
-        <div class="safety-item"><div class="safety-key">Best Timing</div><div class="safety-val">${data.best_timing || '—'}</div></div>
-        <div class="safety-item"><div class="safety-key">Athlete Relevance</div><div class="safety-val" style="font-size:11px;color:#aaa">${data.athlete_relevance || '—'}</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px 16px;">
+        <div style="font-size:9px;font-family:'DM Mono',monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:6px;">KEY STAT (say this on screen)</div>
+        <div style="font-size:14px;font-weight:700;color:#c8f135;">${data.key_stat || '—'}</div>
+      </div>
+      <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px 16px;">
+        <div style="font-size:9px;font-family:'DM Mono',monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:6px;">DOSE TO MENTION</div>
+        <div style="font-size:14px;font-weight:700;color:#fff;">${data.dose || '—'}</div>
       </div>
     </div>
 
-    <div class="study-section-label" style="margin-bottom:12px">Peer-Reviewed Studies</div>
-    <div class="studies-grid">${studiesHTML}</div>
+    <div style="font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:10px;">STUDIES — SHOW TITLE ON SCREEN, TAP LINK FOR FULL PAPER</div>
+    <div>${studiesHTML}</div>
+
+    <button onclick="if(window._currentData){const s=window._currentData;navigator.clipboard.writeText('*BIG GASP FOR AIR*\n\"'+s.one_breath_script+'\"\n\n*GASP*\n\"'+s.cta+'\"');this.textContent='COPIED ✓';setTimeout(()=>this.textContent='COPY SCRIPT',2000);}" style="margin-top:16px;width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;padding:12px;border-radius:8px;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">COPY SCRIPT</button>
   `;
 
-  // Store studies for copy functions
   window._currentStudies = studies;
   window._currentData = data;
 }
