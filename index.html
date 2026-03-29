@@ -2629,49 +2629,46 @@ async function rs_doSearch() {
 
   rs_setLoading(true);
 
-  const prompt = rs_buildPrompt(supp, currentFocus);
+  const usedPmids = JSON.parse(localStorage.getItem('ss_used_pmids') || '[]');
 
   try {
     const response = await fetch('/api/research', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: prompt,
+        supplement: supp,
+        focus: currentFocus,
+        usedPmids: usedPmids,
         apiKey: apiKey
       })
     });
 
     const data = await response.json();
-
     if (data.error) throw new Error(data.error.message);
 
-    // Extract text content from response (may include tool use blocks)
-    const textBlocks = (data.content || []).filter(b => b.type === 'text');
-    const rawText = textBlocks.map(b => b.text).join('');
-
-    // Parse JSON from response
-    let parsed;
-    try {
-      const clean = rawText.replace(/```json|```/g, '').trim();
-      // Find JSON object in the response
-      const jsonMatch = clean.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON found');
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch(e) {
-      throw new Error('Could not parse research data. Try again.');
-    }
-
+    // API now returns parsed JSON directly
+    const parsed = data;
     parsed._supplement = supp;
     parsed._focus = currentFocus;
 
-    // Cache it
-    const cacheKey = `${supp.toLowerCase()}_${currentFocus}`;
+    // Store used PMID — never repeat same study
+    if (parsed.study && parsed.study.pmid) {
+      const pmids = JSON.parse(localStorage.getItem('ss_used_pmids') || '[]');
+      if (!pmids.includes(parsed.study.pmid)) {
+        pmids.push(parsed.study.pmid);
+        if (pmids.length > 200) pmids.shift();
+        localStorage.setItem('ss_used_pmids', JSON.stringify(pmids));
+      }
+    }
+
+    // Cache result
+    const cacheKey = supp.toLowerCase() + '_' + currentFocus;
     resultCache[cacheKey] = parsed;
     localStorage.setItem('ss_cache', JSON.stringify(resultCache));
 
     // Update history
-    const existing = searchHistory.findIndex(h => h.key === cacheKey);
-    const histItem = { key: cacheKey, name: supp, studies: (parsed.studies || []).length, focus: currentFocus };
+    const existing = searchHistory.findIndex(function(h){ return h.key === cacheKey; });
+    const histItem = { key: cacheKey, name: supp, studies: 1, focus: currentFocus };
     if (existing >= 0) searchHistory[existing] = histItem;
     else searchHistory.push(histItem);
     if (searchHistory.length > 30) searchHistory = searchHistory.slice(-30);
@@ -2779,11 +2776,18 @@ function rs_showError(msg) {
 function rs_copyScript() {
   var d = window._currentData;
   if (!d) return;
-  var text = '*BIG GASP FOR AIR*\n"' + (d.one_breath_script||'') + '"\n\n*GASP*\n"' + (d.cta||'') + '"';
+  var text = '*BIG GASP FOR AIR*\n' + (d.one_breath_script||'') + '\n\n*GASP*\n"' + (d.cta||'') + '"';
   navigator.clipboard.writeText(text).then(function() {
     var btn = document.getElementById('copyScriptBtn');
     if (btn) { btn.textContent = 'COPIED'; setTimeout(function(){ btn.textContent = 'COPY SCRIPT'; }, 2000); }
   });
+}
+
+function rs_regenerate() {
+  var d = window._currentData;
+  if (!d) return;
+  document.getElementById('supplementInput').value = d._supplement || d.supplement || '';
+  rs_doSearch();
 }
 
 function rs_showResult(data) {
@@ -2792,51 +2796,61 @@ function rs_showResult(data) {
   var rc = document.getElementById('resultContent');
   rc.style.display = 'block';
 
-  var studies = data.studies || [];
-  var studiesHTML = studies.map(function(s) {
-    var link = s.pubmed_url
-      ? '<a class="study-link" href="' + s.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;">' + s.pubmed_url + '</a>'
-      : '<span style="font-size:11px;color:#555;">Search PubMed</span>';
-    return '<div style="background:#111;border:1px solid #1f1f1f;border-radius:10px;padding:14px 18px;margin-bottom:10px;">' +
-      '<div style="font-size:13px;font-weight:600;color:#e0e0e0;line-height:1.4;margin-bottom:5px;">' + (s.title||'') + '</div>' +
-      '<div style="font-size:11px;color:#555;margin-bottom:8px;">' + (s.authors||'') + (s.year?' · '+s.year:'') + '</div>' +
-      link + '</div>';
-  }).join('');
-
+  var study = data.study || {};
   var script = data.one_breath_script || '';
   var cta = data.cta || 'Follow SUPPSTACKD for more tips like this';
-  var stat = data.key_stat || 'See script';
-  var dose = data.dose || 'See script';
-  var title = data.video_title || 'Everything about ' + (data.supplement||'') + ' in one breath';
+  var stat = data.key_stat || '';
+  var dose = data.dose || '';
+  var wc = data.word_count ? (' <span style="color:#555;">(~' + data.word_count + ' words)</span>') : '';
+  var title = data.video_title || ('Everything about ' + (data.supplement||'') + ' in one breath');
+
+  var studyHTML = study.title
+    ? '<div style="background:#111;border:1px solid #1f1f1f;border-radius:10px;padding:14px 18px;">' +
+        '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:8px;">SOURCE STUDY — SHOW THIS TITLE ON SCREEN</div>' +
+        '<div style="font-size:14px;font-weight:600;color:#e8e8e8;line-height:1.4;margin-bottom:5px;">' + study.title + '</div>' +
+        '<div style="font-size:11px;color:#555;margin-bottom:10px;">' + (study.authors||'') + (study.year?' · '+study.year:'') + '</div>' +
+        (study.pubmed_url
+          ? '<a class="study-link" href="' + study.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;">' + study.pubmed_url + '</a>'
+          : '') +
+      '</div>'
+    : '';
 
   rc.innerHTML =
     '<div style="margin-bottom:20px;">' +
-    '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:8px;">VIDEO TITLE</div>' +
-    '<div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:#fff;letter-spacing:0.04em;line-height:1.1;">' + title + '</div>' +
+      '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:8px;">VIDEO TITLE</div>' +
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:#fff;letter-spacing:0.04em;line-height:1.1;">' + title + '</div>' +
     '</div>' +
 
-    '<div style="background:#0d1a04;border:1px solid rgba(200,241,53,0.2);border-radius:12px;padding:20px;margin-bottom:20px;">' +
-    '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.15em;text-transform:uppercase;color:#c8f135;margin-bottom:12px;">ONE BREATH SCRIPT</div>' +
-    '<div style="font-size:11px;color:#666;font-family:DM Mono,monospace;margin-bottom:10px;">*BIG GASP FOR AIR*</div>' +
-    '<div style="font-size:15px;line-height:1.8;color:#e8e8e8;margin-bottom:12px;">' + (script||'<em style="color:#555;">Search again — try a different focus</em>') + '</div>' +
-    '<div style="font-size:11px;color:#666;font-family:DM Mono,monospace;margin-bottom:10px;">*GASP*</div>' +
-    '<div style="font-size:15px;font-weight:700;color:#c8f135;">"' + cta + '"</div>' +
+    '<div style="background:#0d1a04;border:1px solid rgba(200,241,53,0.2);border-radius:12px;padding:20px;margin-bottom:16px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+        '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.15em;text-transform:uppercase;color:#c8f135;">ONE BREATH SCRIPT' + wc + '</div>' +
+      '</div>' +
+      '<div style="font-size:11px;color:#555;font-family:DM Mono,monospace;margin-bottom:10px;">*BIG GASP FOR AIR*</div>' +
+      '<div style="font-size:15px;line-height:1.8;color:#e8e8e8;margin-bottom:14px;">' +
+        (script || '<em style="color:#555;">Script not generated — hit Regenerate</em>') +
+      '</div>' +
+      '<div style="font-size:11px;color:#555;font-family:DM Mono,monospace;margin-bottom:10px;">*GASP*</div>' +
+      '<div style="font-size:15px;font-weight:700;color:#c8f135;">"' + cta + '"</div>' +
     '</div>' +
 
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">' +
-    '<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px;">' +
-    '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:6px;">KEY STAT</div>' +
-    '<div style="font-size:13px;font-weight:700;color:#c8f135;">' + stat + '</div></div>' +
-    '<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px;">' +
-    '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:6px;">DOSE</div>' +
-    '<div style="font-size:13px;font-weight:700;color:#fff;">' + dose + '</div></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">' +
+      '<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px;">' +
+        '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:6px;">KEY STAT</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#c8f135;">' + (stat||'—') + '</div>' +
+      '</div>' +
+      '<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px;">' +
+        '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:6px;">DOSE</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#fff;">' + (dose||'—') + '</div>' +
+      '</div>' +
     '</div>' +
 
-    '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:10px;">STUDIES — TITLE ON SCREEN · TAP LINK FOR FULL PAPER</div>' +
-    studiesHTML +
-    '<button id="copyScriptBtn" onclick="rs_copyScript()" style="margin-top:14px;width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;padding:12px;border-radius:8px;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">COPY SCRIPT</button>';
+    '<div style="margin-bottom:16px;">' + studyHTML + '</div>' +
 
-  window._currentStudies = studies;
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+      '<button id="copyScriptBtn" onclick="rs_copyScript()" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;padding:12px;border-radius:8px;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">COPY SCRIPT</button>' +
+      '<button onclick="rs_regenerate()" style="background:rgba(200,241,53,0.08);border:1px solid rgba(200,241,53,0.2);color:#c8f135;padding:12px;border-radius:8px;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">REGENERATE</button>' +
+    '</div>';
+
   window._currentData = data;
 }
 
