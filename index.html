@@ -2645,18 +2645,36 @@ async function rs_doSearch() {
 
     if (data.error) throw new Error(data.error.message);
 
-    // Extract text content from response (may include tool use blocks)
-    const textBlocks = (data.content || []).filter(b => b.type === 'text');
-    const rawText = textBlocks.map(b => b.text).join('');
+    // Extract text content — handle web search tool use blocks
+    let rawText = '';
+    for (const block of (data.content || [])) {
+      if (block.type === 'text') {
+        rawText += block.text;
+      } else if (block.type === 'tool_result') {
+        // skip tool results
+      }
+    }
 
-    // Parse JSON from response
+    // Parse JSON from response — find the outermost JSON object
     let parsed;
     try {
       const clean = rawText.replace(/```json|```/g, '').trim();
-      // Find JSON object in the response
-      const jsonMatch = clean.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON found');
-      parsed = JSON.parse(jsonMatch[0]);
+      // Find the last JSON object in the text (most complete one)
+      const matches = [...clean.matchAll(/\{[\s\S]*?\}/g)];
+      // Try from longest match to shortest
+      const allMatches = [];
+      let depth = 0, start = -1;
+      for (let i = 0; i < clean.length; i++) {
+        if (clean[i] === '{') { if (depth === 0) start = i; depth++; }
+        else if (clean[i] === '}') { depth--; if (depth === 0 && start !== -1) { allMatches.push(clean.slice(start, i+1)); start = -1; } }
+      }
+      // Try each match from longest to shortest
+      allMatches.sort((a,b) => b.length - a.length);
+      let found = false;
+      for (const m of allMatches) {
+        try { parsed = JSON.parse(m); found = true; break; } catch(e) {}
+      }
+      if (!found) throw new Error('No valid JSON found');
     } catch(e) {
       throw new Error('Could not parse research data. Try again.');
     }
