@@ -15,20 +15,24 @@ export default async function handler(req, res) {
 
     const usedList = (usedPmids || []).join(', ') || 'none yet';
 
-    const prompt = `You are writing a spoken video script for Max, a professional volleyball player who runs SUPPSTACKD (a supplement tracking app). Max films 20-25 second videos where he speaks in ONE BREATH about a supplement, then gasps and delivers a CTA.
+    const prompt = `You are writing a spoken video script for Max, a professional volleyball player who runs SUPPSTACKD (a supplement tracking app). Max films short videos where he speaks about a supplement in ONE BREATH, then gasps and delivers a fixed CTA.
 
 TASK: Research ${supplement} for ${focus || 'performance and recovery'} and write Max's script.
 
-STEP 1 — Find 4-5 real peer-reviewed RCT or meta-analysis studies on PubMed about ${supplement} for ${focus || 'athletic performance or recovery'}. Pick ONE that has the most compelling specific measurable stat (a real number — %, kg, seconds, etc). Do NOT use any study with these PMIDs: ${usedList}.
+STEP 1 — Find real peer-reviewed RCT or meta-analysis studies on PubMed about ${supplement}. Pick ONE study with the most compelling specific measurable stat. Do NOT use any study with these PMIDs already used: ${usedList}.
 
-STEP 2 — Write the one-breath script. Rules:
-- Exactly 65-80 words (counts as ~20-25 seconds spoken)
-- Written as Max speaks: casual, fast, confident, first person
-- Must include: the key benefit, the specific stat with its number, the dose for general population, and end with "I log mine in SUPPSTACKD"
-- Use "studies show..." or "research found..." — never prescribe, always share
-- No filler words. Every word earns its place.
+STEP 2 — Write the one-breath script. STRICT RULES:
+- MAXIMUM 60 words. Count every word. Do not exceed 60.
+- Must use proper punctuation — commas, full stops, so it reads naturally when spoken
+- Written as Max speaks: casual, confident, first person
+- Must include: the key benefit, the specific stat with its number, the dose for general population, and end naturally with "I log mine in SUPPSTACKD"
+- Use "studies show..." or "research found..." — never prescribe, always share findings
+- No filler. Every word earns its place.
 
-STEP 3 — Write a punchy CTA (5-8 words) Max says after gasping. Must drive follows. Not generic. Examples of good CTAs: "Follow — your stack deserves better data." / "Follow SUPPSTACKD, stop guessing your stack."
+GOOD EXAMPLE (57 words):
+"Creatine monohydrate is the most researched performance supplement out there. Studies show a 23% increase in peak power output during high-intensity training, plus up to 15% more strength gains combined with resistance work. The standard dose is three to five grams daily. I log mine in SUPPSTACKD."
+
+STEP 3 — The CTA is always fixed. Do not change it: "Follow for supplement data that actually matters."
 
 Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or after the opening brace:
 
@@ -36,10 +40,10 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
   "supplement": "${supplement}",
   "focus": "${focus || 'performance'}",
   "video_title": "Everything about ${supplement} in one breath",
-  "one_breath_script": "WRITE THE FULL 65-80 WORD SCRIPT HERE — DO NOT LEAVE THIS EMPTY",
-  "word_count": 72,
-  "cta": "WRITE THE 5-8 WORD CTA HERE",
-  "key_stat": "The specific number from the study e.g. 23% increase in power output",
+  "one_breath_script": "WRITE THE PROPERLY PUNCTUATED MAX-60-WORD SCRIPT HERE",
+  "word_count": 57,
+  "cta": "Follow for supplement data that actually matters.",
+  "key_stat": "The specific number from the study e.g. 23% increase in peak power output",
   "dose": "Evidence-based dose e.g. 3-5g daily",
   "study": {
     "title": "Full exact study title",
@@ -60,7 +64,7 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
-        system: 'You are a sports science content writer. You always return valid JSON only — no markdown, no explanation, no text outside the JSON object. You always fully populate every field. You never leave one_breath_script empty.',
+        system: 'You are a sports science content writer. Return valid JSON only — no markdown, no explanation, nothing outside the JSON. Always fully populate every field. Never exceed 60 words in one_breath_script. Always use proper punctuation. The cta field is always exactly: "Follow for supplement data that actually matters."',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -72,7 +76,6 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
     const rawText = textBlocks.map(b => b.text).join('');
     const clean = rawText.replace(/```json|```/g, '').trim();
 
-    // Walk chars to extract outermost JSON
     const allMatches = [];
     let depth = 0, start = -1;
     for (let i = 0; i < clean.length; i++) {
@@ -87,9 +90,21 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
     for (const m of allMatches) { try { parsed = JSON.parse(m); break; } catch (e) {} }
 
     if (!parsed) return res.status(500).json({ error: 'Could not parse response. Try again.' });
-    if (!parsed.one_breath_script || parsed.one_breath_script.includes('WRITE THE FULL')) {
+    if (!parsed.one_breath_script || parsed.one_breath_script.includes('WRITE THE')) {
       return res.status(500).json({ error: 'Script was not generated. Try again.' });
     }
+
+    // Enforce 60 word cap server-side as a safety net
+    const words = parsed.one_breath_script.trim().split(/\s+/);
+    if (words.length > 60) {
+      parsed.one_breath_script = words.slice(0, 60).join(' ');
+      // Clean up trailing incomplete sentence
+      parsed.one_breath_script = parsed.one_breath_script.replace(/[,;]$/, '') + '.';
+      parsed.word_count = 60;
+    }
+
+    // Always lock the CTA
+    parsed.cta = 'Follow for supplement data that actually matters.';
 
     return res.status(200).json(parsed);
 
