@@ -15,36 +15,36 @@ export default async function handler(req, res) {
 
     const usedList = (usedPmids || []).join(', ') || 'none yet';
 
-    const prompt = `You are writing a spoken video script for Max, a professional volleyball player who runs SUPPSTACKD (a supplement tracking app). Max films short videos where he speaks about a supplement in ONE BREATH, then gasps and delivers a fixed CTA.
+    const prompt = `You are writing a spoken video script for Max, who runs SUPPSTACKD, a supplement tracking app. Max speaks directly to everyday people who take supplements — gym goers, busy professionals, people who care about their health. NOT specialists. NOT athletes specifically.
 
-TASK: Research ${supplement} for ${focus || 'performance and recovery'} and write Max's script.
+TASK: Research ${supplement} for ${focus || 'general health and performance'} and write Max's script.
 
-STEP 1 — Find real peer-reviewed RCT or meta-analysis studies on PubMed about ${supplement}. Pick ONE study with the most compelling specific measurable stat. Do NOT use any study with these PMIDs already used: ${usedList}.
+STEP 1 — Find ONE real peer-reviewed RCT or meta-analysis on PubMed about ${supplement}. Pick the one with the most compelling specific measurable stat — a real number like a percentage or amount. Do NOT use these PMIDs: ${usedList}.
 
-STEP 2 — Write the one-breath script. STRICT RULES:
-- MAXIMUM 60 words. Count every word. Do not exceed 60.
-- Must use proper punctuation — commas, full stops, so it reads naturally when spoken
-- Written as Max speaks: casual, confident, first person
-- Must include: the key benefit, the specific stat with its number, the dose for general population, and end naturally with "I log mine in SUPPSTACKD"
-- Use "studies show..." or "research found..." — never prescribe, always share findings
-- No filler. Every word earns its place.
+STEP 2 — Write the one-breath script. NON-NEGOTIABLE RULES:
+- MAXIMUM 60 words. Hard limit. Count every single word before returning.
+- Proper punctuation — commas where you pause, full stops where sentences end. Must read naturally aloud.
+- Plain everyday English only. Write like you're explaining it to a friend over coffee. If a scientific word is unavoidable, follow it immediately with a simple explanation in brackets or a quick clause.
+- NEVER mention volleyball, sport type, or any specific sport. If needed, say "when I train" — nothing more specific.
+- Include: what it does in plain terms, the specific stat with its number, the dose in plain terms, end with "I log mine in SUPPSTACKD."
+- Use "studies show..." or "research found..." to frame it as sharing, not prescribing.
 
-GOOD EXAMPLE (57 words):
-"Creatine monohydrate is the most researched performance supplement out there. Studies show a 23% increase in peak power output during high-intensity training, plus up to 15% more strength gains combined with resistance work. The standard dose is three to five grams daily. I log mine in SUPPSTACKD."
+GOOD EXAMPLE of tone, length and punctuation (54 words):
+"Creatine is one of the most researched supplements out there. Studies show it can boost your power output by up to 23% during intense exercise, and increase strength gains by around 15%. The standard dose is three to five grams a day. Simple. I log mine in SUPPSTACKD."
 
-STEP 3 — The CTA is always fixed. Do not change it: "Follow for supplement data that actually matters."
+STEP 3 — CTA is always fixed, word for word: "Follow for supplement data that actually matters."
 
-Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or after the opening brace:
+Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or after:
 
 {
   "supplement": "${supplement}",
   "focus": "${focus || 'performance'}",
   "video_title": "Everything about ${supplement} in one breath",
-  "one_breath_script": "WRITE THE PROPERLY PUNCTUATED MAX-60-WORD SCRIPT HERE",
-  "word_count": 57,
+  "one_breath_script": "THE SCRIPT HERE — MAX 60 WORDS, PROPER PUNCTUATION, PLAIN ENGLISH, NO SPORT REFERENCES",
+  "word_count": 54,
   "cta": "Follow for supplement data that actually matters.",
-  "key_stat": "The specific number from the study e.g. 23% increase in peak power output",
-  "dose": "Evidence-based dose e.g. 3-5g daily",
+  "key_stat": "The specific number from the study e.g. 23% increase in power output",
+  "dose": "Plain English dose e.g. 3-5g per day",
   "study": {
     "title": "Full exact study title",
     "authors": "First author et al.",
@@ -64,7 +64,7 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
-        system: 'You are a sports science content writer. Return valid JSON only — no markdown, no explanation, nothing outside the JSON. Always fully populate every field. Never exceed 60 words in one_breath_script. Always use proper punctuation. The cta field is always exactly: "Follow for supplement data that actually matters."',
+        system: 'You are a supplement content writer for a general audience. Rules: (1) Return valid JSON only — nothing outside the braces. (2) one_breath_script must never exceed 60 words — count them. (3) Use plain everyday English — no jargon without immediate plain explanation. (4) Never mention volleyball or any specific sport. (5) Always use proper punctuation. (6) cta is always exactly: "Follow for supplement data that actually matters."',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -90,20 +90,20 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
     for (const m of allMatches) { try { parsed = JSON.parse(m); break; } catch (e) {} }
 
     if (!parsed) return res.status(500).json({ error: 'Could not parse response. Try again.' });
-    if (!parsed.one_breath_script || parsed.one_breath_script.includes('WRITE THE')) {
-      return res.status(500).json({ error: 'Script was not generated. Try again.' });
+    if (!parsed.one_breath_script || parsed.one_breath_script.includes('THE SCRIPT HERE')) {
+      return res.status(500).json({ error: 'Script not generated. Try again.' });
     }
 
-    // Enforce 60 word cap server-side as a safety net
+    // Hard enforce 60 word cap server-side
     const words = parsed.one_breath_script.trim().split(/\s+/);
     if (words.length > 60) {
-      parsed.one_breath_script = words.slice(0, 60).join(' ');
-      // Clean up trailing incomplete sentence
-      parsed.one_breath_script = parsed.one_breath_script.replace(/[,;]$/, '') + '.';
+      parsed.one_breath_script = words.slice(0, 60).join(' ').replace(/[,;]$/, '') + '.';
       parsed.word_count = 60;
+    } else {
+      parsed.word_count = words.length;
     }
 
-    // Always lock the CTA
+    // Always lock CTA
     parsed.cta = 'Follow for supplement data that actually matters.';
 
     return res.status(200).json(parsed);
