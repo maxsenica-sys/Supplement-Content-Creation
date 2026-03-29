@@ -2645,36 +2645,18 @@ async function rs_doSearch() {
 
     if (data.error) throw new Error(data.error.message);
 
-    // Extract text content — handle web search tool use blocks
-    let rawText = '';
-    for (const block of (data.content || [])) {
-      if (block.type === 'text') {
-        rawText += block.text;
-      } else if (block.type === 'tool_result') {
-        // skip tool results
-      }
-    }
+    // Extract text content from response (may include tool use blocks)
+    const textBlocks = (data.content || []).filter(b => b.type === 'text');
+    const rawText = textBlocks.map(b => b.text).join('');
 
-    // Parse JSON from response — find the outermost JSON object
+    // Parse JSON from response
     let parsed;
     try {
       const clean = rawText.replace(/```json|```/g, '').trim();
-      // Find the last JSON object in the text (most complete one)
-      const matches = [...clean.matchAll(/\{[\s\S]*?\}/g)];
-      // Try from longest match to shortest
-      const allMatches = [];
-      let depth = 0, start = -1;
-      for (let i = 0; i < clean.length; i++) {
-        if (clean[i] === '{') { if (depth === 0) start = i; depth++; }
-        else if (clean[i] === '}') { depth--; if (depth === 0 && start !== -1) { allMatches.push(clean.slice(start, i+1)); start = -1; } }
-      }
-      // Try each match from longest to shortest
-      allMatches.sort((a,b) => b.length - a.length);
-      let found = false;
-      for (const m of allMatches) {
-        try { parsed = JSON.parse(m); found = true; break; } catch(e) {}
-      }
-      if (!found) throw new Error('No valid JSON found');
+      // Find JSON object in the response
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON found');
+      parsed = JSON.parse(jsonMatch[0]);
     } catch(e) {
       throw new Error('Could not parse research data. Try again.');
     }
@@ -2794,55 +2776,65 @@ function rs_showError(msg) {
     </div>`;
 }
 
+function rs_copyScript() {
+  var d = window._currentData;
+  if (!d) return;
+  var text = '*BIG GASP FOR AIR*\n"' + (d.one_breath_script||'') + '"\n\n*GASP*\n"' + (d.cta||'') + '"';
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copyScriptBtn');
+    if (btn) { btn.textContent = 'COPIED'; setTimeout(function(){ btn.textContent = 'COPY SCRIPT'; }, 2000); }
+  });
+}
+
 function rs_showResult(data) {
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('loadingState').className = 'loading-state';
-  const rc = document.getElementById('resultContent');
+  var rc = document.getElementById('resultContent');
   rc.style.display = 'block';
 
-  const studies = data.studies || [];
+  var studies = data.studies || [];
+  var studiesHTML = studies.map(function(s) {
+    var link = s.pubmed_url
+      ? '<a class="study-link" href="' + s.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;">' + s.pubmed_url + '</a>'
+      : '<span style="font-size:11px;color:#555;">Search PubMed</span>';
+    return '<div style="background:#111;border:1px solid #1f1f1f;border-radius:10px;padding:14px 18px;margin-bottom:10px;">' +
+      '<div style="font-size:13px;font-weight:600;color:#e0e0e0;line-height:1.4;margin-bottom:5px;">' + (s.title||'') + '</div>' +
+      '<div style="font-size:11px;color:#555;margin-bottom:8px;">' + (s.authors||'') + (s.year?' · '+s.year:'') + '</div>' +
+      link + '</div>';
+  }).join('');
 
-  // Build studies HTML — title + authors + link only
-  const studiesHTML = studies.map((s, i) => `
-    <div class="study-card" style="margin-bottom:10px;">
-      <div class="study-card-body" style="padding:14px 18px;">
-        <div style="font-size:13px;font-weight:600;color:#e0e0e0;line-height:1.4;margin-bottom:6px;">${s.title || ''}</div>
-        <div style="font-size:11px;color:#666;margin-bottom:8px;">${s.authors || ''} &middot; ${s.year || ''}</div>
-        ${s.pubmed_url ? `<a class="study-link" href="${s.pubmed_url}" target="_blank" style="font-size:12px;">&#x1F517; ${s.pubmed_url}</a>` : '<span style="font-size:11px;color:#555;">Search PubMed for full text</span>'}
-      </div>
-    </div>
-  `).join('');
+  var script = data.one_breath_script || '';
+  var cta = data.cta || 'Follow SUPPSTACKD for more tips like this';
+  var stat = data.key_stat || 'See script';
+  var dose = data.dose || 'See script';
+  var title = data.video_title || 'Everything about ' + (data.supplement||'') + ' in one breath';
 
-  rc.innerHTML = `
-    <div style="margin-bottom:20px;">
-      <div style="font-size:10px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:8px;">VIDEO TITLE</div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#fff;letter-spacing:0.04em;line-height:1.1;">${data.video_title || 'Everything about ' + data.supplement + ' in one breath'}</div>
-    </div>
+  rc.innerHTML =
+    '<div style="margin-bottom:20px;">' +
+    '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:8px;">VIDEO TITLE</div>' +
+    '<div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:#fff;letter-spacing:0.04em;line-height:1.1;">' + title + '</div>' +
+    '</div>' +
 
-    <div style="background:linear-gradient(135deg,#0f1a03,#0d0d0d);border:1px solid rgba(200,241,53,0.25);border-radius:14px;padding:20px 22px;margin-bottom:20px;">
-      <div style="font-size:10px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:14px;">&#x1F3A4; ONE BREATH SCRIPT</div>
-      <div style="font-size:11px;color:#777;font-family:'DM Mono',monospace;letter-spacing:0.1em;margin-bottom:10px;">*BIG GASP FOR AIR*</div>
-      <div style="font-size:15px;line-height:1.7;color:#e8e8e8;font-style:italic;margin-bottom:14px;">"${data.one_breath_script || ''}"</div>
-      <div style="font-size:11px;color:#777;font-family:'DM Mono',monospace;letter-spacing:0.1em;margin-bottom:10px;">*GASP*</div>
-      <div style="font-size:14px;font-weight:700;color:#c8f135;">"${data.cta || 'Follow SUPPSTACKD for more tips like this'}"</div>
-    </div>
+    '<div style="background:#0d1a04;border:1px solid rgba(200,241,53,0.2);border-radius:12px;padding:20px;margin-bottom:20px;">' +
+    '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.15em;text-transform:uppercase;color:#c8f135;margin-bottom:12px;">ONE BREATH SCRIPT</div>' +
+    '<div style="font-size:11px;color:#666;font-family:DM Mono,monospace;margin-bottom:10px;">*BIG GASP FOR AIR*</div>' +
+    '<div style="font-size:15px;line-height:1.8;color:#e8e8e8;margin-bottom:12px;">' + (script||'<em style="color:#555;">Search again — try a different focus</em>') + '</div>' +
+    '<div style="font-size:11px;color:#666;font-family:DM Mono,monospace;margin-bottom:10px;">*GASP*</div>' +
+    '<div style="font-size:15px;font-weight:700;color:#c8f135;">"' + cta + '"</div>' +
+    '</div>' +
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
-      <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px 16px;">
-        <div style="font-size:9px;font-family:'DM Mono',monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:6px;">KEY STAT (say this on screen)</div>
-        <div style="font-size:14px;font-weight:700;color:#c8f135;">${data.key_stat || '—'}</div>
-      </div>
-      <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px 16px;">
-        <div style="font-size:9px;font-family:'DM Mono',monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:6px;">DOSE TO MENTION</div>
-        <div style="font-size:14px;font-weight:700;color:#fff;">${data.dose || '—'}</div>
-      </div>
-    </div>
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">' +
+    '<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px;">' +
+    '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:6px;">KEY STAT</div>' +
+    '<div style="font-size:13px;font-weight:700;color:#c8f135;">' + stat + '</div></div>' +
+    '<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px;">' +
+    '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:6px;">DOSE</div>' +
+    '<div style="font-size:13px;font-weight:700;color:#fff;">' + dose + '</div></div>' +
+    '</div>' +
 
-    <div style="font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:10px;">STUDIES — SHOW TITLE ON SCREEN, TAP LINK FOR FULL PAPER</div>
-    <div>${studiesHTML}</div>
-
-    <button onclick="if(window._currentData){const s=window._currentData;navigator.clipboard.writeText('*BIG GASP FOR AIR*\n\"'+s.one_breath_script+'\"\n\n*GASP*\n\"'+s.cta+'\"');this.textContent='COPIED ✓';setTimeout(()=>this.textContent='COPY SCRIPT',2000);}" style="margin-top:16px;width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;padding:12px;border-radius:8px;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">COPY SCRIPT</button>
-  `;
+    '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:10px;">STUDIES — TITLE ON SCREEN · TAP LINK FOR FULL PAPER</div>' +
+    studiesHTML +
+    '<button id="copyScriptBtn" onclick="rs_copyScript()" style="margin-top:14px;width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;padding:12px;border-radius:8px;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">COPY SCRIPT</button>';
 
   window._currentStudies = studies;
   window._currentData = data;
