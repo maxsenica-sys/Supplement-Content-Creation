@@ -2646,16 +2646,15 @@ async function rs_doSearch() {
     const data = await response.json();
     if (data.error) throw new Error(data.error.message);
 
-    // API now returns parsed JSON directly
     const parsed = data;
     parsed._supplement = supp;
     parsed._focus = currentFocus;
 
-    // Store used PMID — never repeat same study
-    if (parsed.study && parsed.study.pmid) {
+    // Store used PMID
+    if (parsed._usedPmid) {
       const pmids = JSON.parse(localStorage.getItem('ss_used_pmids') || '[]');
-      if (!pmids.includes(parsed.study.pmid)) {
-        pmids.push(parsed.study.pmid);
+      if (!pmids.includes(parsed._usedPmid)) {
+        pmids.push(parsed._usedPmid);
         if (pmids.length > 200) pmids.shift();
         localStorage.setItem('ss_used_pmids', JSON.stringify(pmids));
       }
@@ -2666,7 +2665,6 @@ async function rs_doSearch() {
     resultCache[cacheKey] = parsed;
     localStorage.setItem('ss_cache', JSON.stringify(resultCache));
 
-    // Update history
     const existing = searchHistory.findIndex(function(h){ return h.key === cacheKey; });
     const histItem = { key: cacheKey, name: supp, studies: 1, focus: currentFocus };
     if (existing >= 0) searchHistory[existing] = histItem;
@@ -2773,13 +2771,13 @@ function rs_showError(msg) {
     </div>`;
 }
 
-function rs_copyScript() {
+function rs_copyPoints() {
   var d = window._currentData;
-  if (!d) return;
-  var text = '*BIG GASP FOR AIR*\n' + (d.one_breath_script||'') + '\n\n*GASP*\n"' + (d.cta||'') + '"';
+  if (!d || !d.dot_points) return;
+  var text = d.dot_points.map(function(p, i){ return (i+1) + '. ' + p; }).join('\n');
   navigator.clipboard.writeText(text).then(function() {
     var btn = document.getElementById('copyScriptBtn');
-    if (btn) { btn.textContent = 'COPIED'; setTimeout(function(){ btn.textContent = 'COPY SCRIPT'; }, 2000); }
+    if (btn) { btn.textContent = 'COPIED'; setTimeout(function(){ btn.textContent = 'COPY ALL POINTS'; }, 2000); }
   });
 }
 
@@ -2796,44 +2794,54 @@ function rs_showResult(data) {
   var rc = document.getElementById('resultContent');
   rc.style.display = 'block';
 
+  var points = data.dot_points || [];
   var study = data.study || {};
-  var script = data.one_breath_script || '';
-  var cta = data.cta || 'Follow SUPPSTACKD for more tips like this';
   var stat = data.key_stat || '';
   var dose = data.dose || '';
-  var wc = data.word_count ? (' <span style="color:#555;">(~' + data.word_count + ' words)</span>') : '';
-  var title = data.video_title || ('Everything about ' + (data.supplement||'') + ' in one breath');
+  var title = data.video_title || ('Everything about ' + (data.supplement||'') + ' in 9 seconds');
+
+  // Dot points — numbered, each on its own card
+  var pointColors = ['#c8f135','#c8f135','#c8f135','#4d9fff','#ff6b35','#c8f135'];
+  var pointLabels = ['BENEFIT 1','BENEFIT 2','BENEFIT 3','STUDY REFERENCE','SUPPSTACKD','CTA'];
+
+  var pointsHTML = points.map(function(p, i) {
+    var color = pointColors[i] || '#c8f135';
+    var label = pointLabels[i] || ('POINT ' + (i+1));
+    // Last point is always CTA
+    if (i === points.length - 1) { color = '#c8f135'; label = 'CTA'; }
+    // Second to last is SUPPSTACKD
+    if (i === points.length - 2) { color = '#ff6b35'; label = 'SUPPSTACKD'; }
+    // Third to last is study
+    if (i === points.length - 3) { color = '#4d9fff'; label = 'STUDY'; }
+
+    return '<div style="background:#111;border:1px solid #1f1f1f;border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px;">' +
+      '<div style="flex-shrink:0;width:24px;height:24px;border-radius:6px;background:' + color + '18;border:1px solid ' + color + '33;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:' + color + ';font-family:DM Mono,monospace;">' + (i+1) + '</div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:' + color + ';opacity:0.7;margin-bottom:4px;">' + label + '</div>' +
+        '<div style="font-size:16px;color:#f0f0f0;line-height:1.4;font-weight:500;">' + p + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 
   var studyHTML = study.title
-    ? '<div style="background:#111;border:1px solid #1f1f1f;border-radius:10px;padding:14px 18px;">' +
-        '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:8px;">SOURCE STUDY — SHOW THIS TITLE ON SCREEN</div>' +
-        '<div style="font-size:14px;font-weight:600;color:#e8e8e8;line-height:1.4;margin-bottom:5px;">' + study.title + '</div>' +
-        '<div style="font-size:11px;color:#555;margin-bottom:10px;">' + (study.authors||'') + (study.year?' · '+study.year:'') + '</div>' +
-        (study.pubmed_url
-          ? '<a class="study-link" href="' + study.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;">' + study.pubmed_url + '</a>'
-          : '') +
+    ? '<div style="background:#0d0f1a;border:1px solid rgba(77,159,255,0.2);border-radius:10px;padding:14px 18px;margin-bottom:16px;">' +
+        '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#4d9fff;margin-bottom:8px;">SOURCE STUDY — SHOW TITLE ON SCREEN</div>' +
+        '<div style="font-size:13px;font-weight:600;color:#e0e0e0;line-height:1.4;margin-bottom:4px;">' + study.title + '</div>' +
+        '<div style="font-size:11px;color:#555;margin-bottom:8px;">' + (study.authors||'') + (study.year?' · '+study.year:'') + '</div>' +
+        (study.pubmed_url ? '<a class="study-link" href="' + study.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;">' + study.pubmed_url + '</a>' : '') +
       '</div>'
     : '';
 
   rc.innerHTML =
     '<div style="margin-bottom:20px;">' +
-      '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:8px;">VIDEO TITLE</div>' +
+      '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:6px;">VIDEO TITLE</div>' +
       '<div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:#fff;letter-spacing:0.04em;line-height:1.1;">' + title + '</div>' +
     '</div>' +
 
-    '<div style="background:#0d1a04;border:1px solid rgba(200,241,53,0.2);border-radius:12px;padding:20px;margin-bottom:16px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-        '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.15em;text-transform:uppercase;color:#c8f135;">ONE BREATH SCRIPT' + wc + '</div>' +
-      '</div>' +
-      '<div style="font-size:11px;color:#555;font-family:DM Mono,monospace;margin-bottom:10px;">*BIG GASP FOR AIR*</div>' +
-      '<div style="font-size:15px;line-height:1.8;color:#e8e8e8;margin-bottom:14px;">' +
-        (script || '<em style="color:#555;">Script not generated — hit Regenerate</em>') +
-      '</div>' +
-      '<div style="font-size:11px;color:#555;font-family:DM Mono,monospace;margin-bottom:10px;">*GASP*</div>' +
-      '<div style="font-size:15px;font-weight:700;color:#c8f135;">"' + cta + '"</div>' +
-    '</div>' +
+    '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:10px;">SCRIPT POINTS — FILM EACH ONE, CUT BETWEEN</div>' +
+    pointsHTML +
 
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;margin-bottom:16px;">' +
       '<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:10px;padding:14px;">' +
         '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#555;margin-bottom:6px;">KEY STAT</div>' +
         '<div style="font-size:13px;font-weight:700;color:#c8f135;">' + (stat||'—') + '</div>' +
@@ -2844,10 +2852,10 @@ function rs_showResult(data) {
       '</div>' +
     '</div>' +
 
-    '<div style="margin-bottom:16px;">' + studyHTML + '</div>' +
+    studyHTML +
 
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-      '<button id="copyScriptBtn" onclick="rs_copyScript()" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;padding:12px;border-radius:8px;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">COPY SCRIPT</button>' +
+      '<button id="copyScriptBtn" onclick="rs_copyPoints()" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;padding:12px;border-radius:8px;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">COPY ALL POINTS</button>' +
       '<button onclick="rs_regenerate()" style="background:rgba(200,241,53,0.08);border:1px solid rgba(200,241,53,0.2);color:#c8f135;padding:12px;border-radius:8px;font-size:12px;font-weight:600;letter-spacing:0.08em;cursor:pointer;">REGENERATE</button>' +
     '</div>';
 
