@@ -15,88 +15,100 @@ export default async function handler(req, res) {
 
     const usedList = (usedPmids || []).join(', ') || 'none yet';
 
-    const prompt = `You are writing short-form video scripts for SUPPSTACKD. The creator films himself on his phone — one dot point per cut, reading each line off the screen. Videos are 9 seconds total. The audience is everyday gym goers and health-conscious people. NOT specialists or athletes.
+    const prompt = `You are writing a 9-second dot-point video script about ${supplement} for ${focus || 'general health and performance'}.
 
-TASK: Write a 9-second dot-point script for ${supplement} focused on ${focus || 'general health and performance'}.
+The creator reads each point off his phone — one cut per point. Audience: everyday gym goers and health-conscious adults. NOT specialists.
 
-STEP 1 — Find ONE real peer-reviewed RCT or meta-analysis on PubMed about ${supplement}. Must have a specific measurable number in the result. Do NOT use these PMIDs: ${usedList}.
+━━━ STEP 1: FIND A REAL STUDY ━━━
 
-STEP 2 — Write the dot points using the EXACT structure below.
+Find ONE real, human, peer-reviewed RCT or meta-analysis specifically about ${supplement}.
 
-━━━ STRUCTURE ━━━
+STRICT STUDY RULES:
+- Must be specifically about ${supplement} — not a tangentially related compound, not fungi, not animal research
+- Must have a REAL PubMed ID (PMID) — you must be certain this PMID exists on pubmed.ncbi.nlm.nih.gov
+- Must include a specific measurable number (%, kg, seconds, etc.)
+- Must include the dose used in the study AND the duration (how many weeks/days)
+- Do NOT use these PMIDs: ${usedList}
+- If you are not certain a PMID is real, set pmid and pubmed_url to null in the JSON
+- The pubmed_url must exactly match: https://pubmed.ncbi.nlm.nih.gov/[PMID]/ — only include if PMID is certain
 
-POINT 1 — BENEFIT + MECHANISM (spoken at ~2s into video)
-Format: "[What it does] — [why/how in plain words]."
-The "why" must be a plain-English mechanism — the actual reason it works, not a restatement of the benefit.
-Max 10 words total. Must fit in 2.5 seconds spoken aloud.
-BAD: "Boosts your power output fast." (no mechanism)
-BAD: "Boosts power — makes you stronger." (mechanism is just the benefit repeated)
-GOOD: "Boosts power — your muscles store more fast-burning fuel."
-GOOD: "Sharpens focus — it slows the brain chemical that causes tiredness."
+━━━ STEP 2: WRITE THE DOT POINTS ━━━
 
-POINT 2 — BENEFIT + MECHANISM (spoken at ~4s)
-Same format. Different benefit, different mechanism. Max 10 words.
+You must write EXACTLY 5 dot points in this order:
 
-POINT 3 — DOSE + STUDY PROOF (spoken at ~6s)
-Weave the dose AND the study finding into one sentence.
-Format: "[Dose] daily — a study on [X people] found [specific number result]."
-Max 12 words. The dose must be specific (e.g. "3–5g", "400mg", "10mg").
-BAD: "Studies show it works well." (no number, no dose)
-GOOD: "3–5g daily — a study on 40 adults found 23% more power output."
-GOOD: "500mg daily — a trial on 60 people found 18% less anxiety."
+POINT 1 — BENEFIT + BIOLOGICAL MECHANISM
+Structure: "[What it does] — [the actual biological reason why]."
+- The mechanism is the specific biological or chemical process that causes the benefit
+- It must answer "but HOW does it do that at a cellular level?" — not restate the benefit in different words
+- Max 14 words total.
+- FAIL examples (rejected — no real mechanism):
+  x "Increases your power during workouts." — just a statement, zero mechanism
+  x "Boosts power — makes muscles work better." — vague, not a mechanism
+  x "Helps you recover between sets faster." — zero mechanism
+- PASS examples (accepted — real biological mechanism):
+  v "Boosts power output — it refills your muscles' fast energy stores between reps."
+  v "Sharpens focus — it blocks adenosine, the brain chemical that makes you feel tired."
+  v "Reduces soreness — it lowers the inflammatory signals muscles release after hard training."
+  v "Improves sleep — it raises GABA, the chemical that slows your brain activity at night."
 
-POINT 4 — SUPPSTACKD (spoken at ~8s)
-One sentence. Use the cost-per-dose or tracking angle. Must feel useful, not salesy.
-Max 10 words.
-GOOD: "Most stacks cost $300+ a year — SUPPSTACKD shows you exactly."
-GOOD: "Log your dose in SUPPSTACKD — see if it's actually working."
+POINT 2 — SECOND BENEFIT + BIOLOGICAL MECHANISM
+Same rules as Point 1. Must be a different benefit with its own distinct mechanism. Max 14 words.
 
-POINT 5 — CTA (always fixed, word for word)
-"Follow for supplement data that actually matters."
+POINT 3 — DOSE + DURATION + STUDY FINDING
+ONE sentence containing all three: the dose from the study, the duration of the study, and the specific result.
+Structure: "Taking [dose] daily for [X weeks] — a study found [specific number + outcome]."
+- Dose = the actual dose used in the study
+- Duration = the actual study length
+- Result = the specific measured number
+- Max 18 words. Conversational tone, not academic.
+- FAIL examples:
+  x "A study on 20 men found 15% more bench press reps." — no dose, no duration
+  x "3-5g daily — a study found 15% more reps." — no duration
+  x "Taking creatine for 8 weeks improves performance." — no dose, no specific number
+- PASS examples:
+  v "Taking 5g daily for 8 weeks — a study found 23% more peak power output."
+  v "Taking 400mg daily for 12 weeks — a trial found 18% lower anxiety scores."
+  v "Taking 3g daily for 4 weeks — researchers found sleep onset cut by 9 minutes."
 
-━━━ RULES ━━━
-- Plain everyday English ONLY — if a 15-year-old wouldn't understand it, rewrite it
-- No sport references, no jargon without instant explanation, no volleyball
-- Every mechanism must be the actual biological or chemical reason — not marketing speak
-- Mechanisms should make the viewer think "oh, THAT'S how it works" — that's the hook that keeps them watching
-- Say each point aloud and time it — Points 1–2 must be under 2.5s each, Point 3 under 3s
-- Dose in Point 3 must match the real evidence-based dose from the study
+POINT 4 — SUPPSTACKD
+One sentence. Cost-tracking or daily logging angle. Useful, not salesy. Max 12 words.
+v "Most supplement stacks cost $300+ a year — SUPPSTACKD shows the breakdown."
+v "Log your dose in SUPPSTACKD and see what's actually costing you."
 
-━━━ EXAMPLE OUTPUT for creatine ━━━
-{
-  "dot_points": [
-    "Boosts power output — your muscles store more fast-burning fuel.",
-    "Helps build more muscle — it pulls water into muscle cells to speed recovery.",
-    "3–5g daily — a study on 30 athletes found 23% more peak power.",
-    "Most stacks cost $300+ a year — SUPPSTACKD shows you exactly where it goes.",
-    "Follow for supplement data that actually matters."
-  ]
-}
+POINT 5 — CTA (FIXED — DO NOT CHANGE A SINGLE WORD)
+Exactly: "Follow for supplement data that actually matters."
 
-━━━ RETURN FORMAT ━━━
-Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or after:
+━━━ LANGUAGE RULES ━━━
+- Plain everyday English only — if a 15-year-old wouldn't get it, rewrite it
+- No sport names, no volleyball
+- Mechanisms must be biological facts, not marketing copy
+- Be direct — never say "may", "can help", "supports", "promotes"
+
+━━━ RETURN THIS EXACT JSON — RAW, NO MARKDOWN, NO BACKTICKS ━━━
 
 {
   "supplement": "${supplement}",
   "focus": "${focus || 'performance'}",
   "video_title": "Everything about ${supplement} in 9 seconds",
   "dot_points": [
-    "Benefit + mechanism sentence.",
-    "Benefit + mechanism sentence.",
-    "Dose + study finding sentence.",
+    "Benefit plus mechanism sentence.",
+    "Benefit plus mechanism sentence.",
+    "Taking [dose] for [duration] — a study found [number plus outcome].",
     "SUPPSTACKD sentence.",
     "Follow for supplement data that actually matters."
   ],
-  "key_stat": "The specific number from the study e.g. 23% increase in power output",
-  "dose": "Plain English dose e.g. 3–5g per day",
+  "key_stat": "The specific number with context e.g. 23% increase in peak power output after 8 weeks on 5g per day",
+  "dose": "Dose from the study e.g. 5g per day",
   "study": {
-    "title": "Full exact study title",
-    "authors": "First author et al.",
+    "title": "Full exact title of the study",
+    "authors": "First author surname et al.",
     "year": 2022,
-    "pmid": "12345678",
-    "pubmed_url": "https://pubmed.ncbi.nlm.nih.gov/12345678/"
+    "pmid": null,
+    "pubmed_url": null
   }
-}`;
+}
+
+IMPORTANT: Only populate pmid and pubmed_url if you are 100% certain the PMID is real and points to a study about ${supplement} on PubMed. If there is any doubt, leave both as null. A wrong link is worse than no link.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -108,7 +120,16 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
-        system: 'You are a supplement video script writer for a general audience. Rules: (1) Return valid JSON only — nothing outside the braces. (2) Every benefit dot point MUST include the mechanism — the biological reason it works, in plain English. Not a restatement of the benefit. (3) Point 3 must weave in dose AND a specific study number. (4) Plain everyday English — no jargon. (5) Never mention volleyball or any specific sport. (6) Last dot point is always exactly: "Follow for supplement data that actually matters." (7) Say each point aloud — Points 1 and 2 must be under 2.5 seconds spoken.',
+        system: `You are a supplement video script writer. Follow this format exactly or the output is rejected.
+
+NON-NEGOTIABLE RULES:
+1. Return valid JSON only. Nothing outside the braces. No markdown. No backticks.
+2. Points 1 and 2 MUST contain a real biological mechanism — the specific cellular or chemical reason the benefit occurs. "Makes muscles work better" is NOT a mechanism. "Refills phosphocreatine stores so muscles can contract again faster" IS a mechanism.
+3. Point 3 MUST contain dose + duration + specific number from the study — all three in one sentence.
+4. The study must be specifically about ${supplement}. If you cannot find a real study, say so in the study title field and set pmid and pubmed_url to null.
+5. Only include a PMID/URL if you are 100% certain it is real. A wrong link is a critical failure. Default to null if uncertain.
+6. Point 5 is always exactly: "Follow for supplement data that actually matters."
+7. Plain English only — no jargon, no sport names.`,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -140,6 +161,19 @@ Return ONLY this exact JSON, raw, no markdown, no backticks, nothing before or a
 
     // Always lock CTA as last point
     parsed.dot_points[parsed.dot_points.length - 1] = 'Follow for supplement data that actually matters.';
+
+    // Sanitise PMID/URL — null out anything that looks like a placeholder or hallucination
+    if (parsed.study) {
+      const badPattern = /^\[|\]$|^null$|^unknown$|^N\/A$|^none$/i;
+      const pmid = String(parsed.study.pmid || '');
+      const url = String(parsed.study.pubmed_url || '');
+      if (!pmid || badPattern.test(pmid) || pmid === 'null') parsed.study.pmid = null;
+      if (!url || badPattern.test(url) || url === 'null' || url.includes('[')) parsed.study.pubmed_url = null;
+      // If URL doesn't match expected PubMed format, null it
+      if (parsed.study.pubmed_url && !/^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\/$/.test(parsed.study.pubmed_url)) {
+        parsed.study.pubmed_url = null;
+      }
+    }
 
     // Store used PMID
     if (parsed.study && parsed.study.pmid) {
