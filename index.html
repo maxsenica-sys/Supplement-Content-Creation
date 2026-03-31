@@ -2764,20 +2764,22 @@ function rs_showResult(data) {
 
   var validUrl = study.pubmed_url && /^\/\/pubmed\.ncli\.nlm\.nih\.gov\/\d+\/$/;
   // Check URL format properly
-  var isValidPubmedUrl = study.pubmed_url && (function(u){ return /^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\/$/.test(u); })(study.pubmed_url);
-  var linkHTML = isValidPubmedUrl
-    ? '<a class="study-link" href="' + study.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;display:block;margin-top:6px;">' + study.pubmed_url + '</a>'
-    : '<div style="font-size:11px;color:#885500;background:#1a1200;border:1px solid #443300;border-radius:6px;padding:7px 10px;margin-top:8px;">⚠️ PubMed link not verified — search the study title on PubMed to confirm before filming.</div>';
-  var studyHTML = study.title
-    ? '<div style="background:#0d0f1a;border:1px solid rgba(77,159,255,0.2);border-radius:10px;padding:14px 18px;margin-bottom:16px;">' +
-        '<div style="font-size:9px;font-family:DM Mono,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#4d9fff;margin-bottom:8px;">SOURCE STUDY — VERIFY ON PUBMED BEFORE FILMING</div>' +
-        '<div style="font-size:13px;font-weight:600;color:#e0e0e0;line-height:1.4;margin-bottom:4px;">' + study.title + '</div>' +
-        '<div style="font-size:11px;color:#555;margin-bottom:4px;">' + (study.authors||'') + (study.year?' · '+study.year:'') + '</div>' +
-        linkHTML +
-      '</div>'
-    : '';
+  var linkStatus = study._link_status || 'unverified';
+  var linkHTML = '';
+  if (study.pubmed_url && linkStatus === 'verified') {
+    linkHTML = '<a class="study-link" href="' + study.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;display:block;margin-top:6px;">✓ ' + study.pubmed_url + '</a>';
+  } else if (study.pubmed_url && linkStatus === 'unverified') {
+    linkHTML = '<div style="margin-top:8px;">' +
+      '<a class="study-link" href="' + study.pubmed_url + '" target="_blank" style="font-size:12px;word-break:break-all;display:block;margin-bottom:6px;">' + study.pubmed_url + '</a>' +
+      '<div style="font-size:11px;color:#885500;background:#1a1200;border:1px solid #443300;border-radius:6px;padding:6px 10px;">⚠️ Link not verified — click to confirm before filming.</div>' +
+      '</div>';
+  } else if (linkStatus === 'not_found') {
+    linkHTML = '<div style="font-size:11px;color:#883300;background:#1a0800;border:1px solid #551100;border-radius:6px;padding:7px 10px;margin-top:8px;">✗ PubMed link returned no page — search this study title manually on PubMed.</div>';
+  } else {
+    linkHTML = '<div style="font-size:11px;color:#885500;background:#1a1200;border:1px solid #443300;border-radius:6px;padding:7px 10px;margin-top:8px;">⚠️ No verified PubMed link — search this study title on PubMed to confirm before filming.</div>';
+  }
 
-  rc.innerHTML =
+    rc.innerHTML =
     '<div style="margin-bottom:20px;">' +
       '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.18em;text-transform:uppercase;color:#c8f135;margin-bottom:6px;">VIDEO TITLE</div>' +
       '<div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:#fff;letter-spacing:0.04em;line-height:1.1;">' + title + '</div>' +
