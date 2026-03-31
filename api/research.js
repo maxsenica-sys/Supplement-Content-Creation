@@ -10,12 +10,12 @@ export default async function handler(req, res) {
     const { supplement, focus, usedPmids, apiKey } = req.body;
 
     if (!apiKey || !apiKey.startsWith('sk-ant')) {
-      return res.status(400).json({ error: 'Invalid API key' });
+      return res.status(400).json({ error: 'Invalid API key format — must start with sk-ant' });
     }
 
     const usedList = (usedPmids || []).join(', ') || 'none yet';
     const currentYear = new Date().getFullYear();
-    const cutoffYear = currentYear - 15; // 2010+
+    const cutoffYear = currentYear - 15;
 
     const prompt = `You are writing a 9-second dot-point video script about ${supplement} for ${focus || 'general health and performance'}.
 
@@ -35,8 +35,7 @@ STUDY SELECTION RULES — ALL must be met:
 - Must report a specific measurable number (%, kg, seconds, mg/dL, etc.)
 - Must state the study duration clearly
 - Do NOT use these PMIDs: ${usedList}
-- You MUST provide a real PMID. Only include it if you are highly confident it exists on PubMed.
-- If you are uncertain about a PMID, set pmid and pubmed_url to null — a wrong link is worse than no link
+- Only include a PMID if you are highly confident it exists on PubMed — if uncertain, set pmid and pubmed_url to null
 
 DOSE REALISM CHECK — before writing Point 3, ask yourself:
 "Would a doctor or dietitian recommend this dose for ongoing daily use?"
@@ -95,7 +94,7 @@ Exactly: "Follow for supplement data that actually matters."
 - Plain everyday English — if a 15-year-old wouldn't understand, rewrite
 - No sport names, no volleyball
 - Mechanisms must be real biology, not marketing language
-- Long-term health and safety framing throughout — this is about sustainable use, not short-term hacks
+- Long-term health and safety framing throughout — sustainable use, not short-term hacks
 - Never say "may", "can help", "supports", "promotes" — be specific and direct
 
 ━━━ RETURN THIS EXACT JSON — RAW, NO MARKDOWN, NO BACKTICKS ━━━
@@ -117,25 +116,27 @@ Exactly: "Follow for supplement data that actually matters."
     "title": "Full exact study title",
     "authors": "First author surname et al.",
     "year": 2018,
-    "pmid": "12345678",
-    "pubmed_url": "https://pubmed.ncbi.nlm.nih.gov/12345678/"
+    "pmid": null,
+    "pubmed_url": null
   }
 }
 
-CRITICAL: Only populate pmid and pubmed_url if you are confident the PMID is real. If uncertain, set both to null.`;
+CRITICAL: Only populate pmid and pubmed_url if you are confident the PMID is real. If uncertain, leave both as null.`;
 
     // ── Call Claude API ──────────────────────────────────────
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        system: `You are a supplement video script writer producing content about long-term, sustainable supplement use.
+    let claudeRaw;
+    try {
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+          system: `You are a supplement video script writer producing content about long-term, sustainable supplement use.
 
 NON-NEGOTIABLE RULES:
 1. Return valid JSON only — nothing outside the braces, no markdown, no backticks.
@@ -146,17 +147,43 @@ NON-NEGOTIABLE RULES:
 6. Only include PMID/URL if you are confident it is real. A wrong link is a critical failure — default to null.
 7. Point 5 is always exactly: "Follow for supplement data that actually matters."
 8. Long-term health framing throughout — not short-term hacks or loading phases.`,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
 
-    const claudeData = await claudeRes.json();
-    if (claudeData.error) return res.status(400).json({ error: claudeData.error.message || claudeData.error });
+      // Read as text first — catches HTML error pages from Anthropic
+      claudeRaw = await claudeRes.text();
+
+      if (!claudeRes.ok) {
+        // Try to extract a useful message from the response
+        let errMsg = `Anthropic API error ${claudeRes.status}`;
+        try {
+          const errData = JSON.parse(claudeRaw);
+          errMsg = errData.error?.message || errData.error || errMsg;
+        } catch (_) {}
+        return res.status(502).json({ error: errMsg });
+      }
+
+    } catch (fetchErr) {
+      return res.status(502).json({ error: 'Could not reach Anthropic API: ' + fetchErr.message });
+    }
+
+    // ── Parse Claude response ────────────────────────────────
+    let claudeData;
+    try {
+      claudeData = JSON.parse(claudeRaw);
+    } catch (_) {
+      return res.status(500).json({ error: 'Unexpected response from Anthropic API. Try again.' });
+    }
+
+    if (claudeData.error) {
+      return res.status(400).json({ error: claudeData.error.message || String(claudeData.error) });
+    }
 
     const rawText = (claudeData.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
     const clean = rawText.replace(/```json|```/g, '').trim();
 
-    // Extract JSON
+    // Extract outermost JSON object
     const allMatches = [];
     let depth = 0, start = -1;
     for (let i = 0; i < clean.length; i++) {
@@ -168,11 +195,11 @@ NON-NEGOTIABLE RULES:
     }
     allMatches.sort((a, b) => b.length - a.length);
     let parsed = null;
-    for (const m of allMatches) { try { parsed = JSON.parse(m); break; } catch (e) {} }
+    for (const m of allMatches) { try { parsed = JSON.parse(m); break; } catch (_) {} }
 
-    if (!parsed) return res.status(500).json({ error: 'Could not parse response. Try again.' });
+    if (!parsed) return res.status(500).json({ error: 'Could not parse AI response. Try again.' });
     if (!parsed.dot_points || !Array.isArray(parsed.dot_points) || parsed.dot_points.length === 0) {
-      return res.status(500).json({ error: 'Content not generated. Try again.' });
+      return res.status(500).json({ error: 'No content generated. Try again.' });
     }
 
     // Lock CTA
@@ -182,16 +209,14 @@ NON-NEGOTIABLE RULES:
     if (parsed.study) {
       const url = parsed.study.pubmed_url;
       const pmid = String(parsed.study.pmid || '');
-
-      // First: format check
       const isValidFormat = url && /^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\d+\/$/.test(url);
-      const isPlaceholder = /^\[|\]$|^null$|^unknown$|^N\/A$/i.test(pmid) || pmid === 'null' || !pmid;
+      const isPlaceholder = !pmid || pmid === 'null' || /^\[|^null$|^unknown$|^N\/A$/i.test(pmid);
 
-      if (isPlaceholder) {
+      if (isPlaceholder || !isValidFormat) {
         parsed.study.pmid = null;
         parsed.study.pubmed_url = null;
-      } else if (isValidFormat) {
-        // Actually fetch the PubMed page to confirm it exists
+        parsed.study._link_status = 'none';
+      } else {
         try {
           const pubmedCheck = await fetch(url, {
             method: 'HEAD',
@@ -199,32 +224,24 @@ NON-NEGOTIABLE RULES:
             redirect: 'follow',
             signal: AbortSignal.timeout(5000)
           });
+          parsed.study._link_status = pubmedCheck.status === 200 ? 'verified' : 'not_found';
           if (pubmedCheck.status !== 200) {
-            // Page doesn't exist or redirected away — null it out
             parsed.study.pmid = null;
             parsed.study.pubmed_url = null;
-            parsed.study._link_status = 'not_found';
-          } else {
-            parsed.study._link_status = 'verified';
           }
-        } catch (fetchErr) {
-          // Network error on verification — mark unverified but keep the URL
+        } catch (_) {
           parsed.study._link_status = 'unverified';
         }
-      } else {
-        parsed.study.pmid = null;
-        parsed.study.pubmed_url = null;
       }
     }
 
-    // Store verified PMID in used list
-    if (parsed.study && parsed.study.pmid && parsed.study._link_status === 'verified') {
+    if (parsed.study?.pmid && parsed.study?._link_status === 'verified') {
       parsed._usedPmid = parsed.study.pmid;
     }
 
     return res.status(200).json(parsed);
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message || 'Internal server error' });
   }
 }
