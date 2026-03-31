@@ -2743,18 +2743,15 @@ function rs_showResult(data) {
   var title = data.video_title || ('Everything about ' + (data.supplement||'') + ' in 9 seconds');
 
   // Dot points — numbered, each on its own card
-  var pointColors = ['#c8f135','#c8f135','#c8f135','#4d9fff','#ff6b35','#c8f135'];
-  var pointLabels = ['BENEFIT 1','BENEFIT 2','BENEFIT 3','STUDY REFERENCE','SUPPSTACKD','CTA'];
-
   var pointsHTML = points.map(function(p, i) {
-    var color = pointColors[i] || '#c8f135';
-    var label = pointLabels[i] || ('POINT ' + (i+1));
-    // Last point is always CTA
-    if (i === points.length - 1) { color = '#c8f135'; label = 'CTA'; }
-    // Second to last is SUPPSTACKD
-    if (i === points.length - 2) { color = '#ff6b35'; label = 'SUPPSTACKD'; }
-    // Third to last is study
-    if (i === points.length - 3) { color = '#4d9fff'; label = 'STUDY'; }
+    var color, label;
+    // Always derive from position relative to end so 4-point and 5-point arrays both work
+    var fromEnd = points.length - 1 - i;
+    if (fromEnd === 0) { color = '#c8f135'; label = 'CTA'; }
+    else if (fromEnd === 1) { color = '#ff6b35'; label = 'SUPPSTACKD'; }
+    else if (fromEnd === 2) { color = '#4d9fff'; label = 'DOSE + STUDY'; }
+    else if (i === 0)       { color = '#c8f135'; label = 'BENEFIT 1  ·  HOW IT WORKS'; }
+    else                    { color = '#c8f135'; label = 'BENEFIT 2  ·  HOW IT WORKS'; }
 
     return '<div style="background:#111;border:1px solid #1f1f1f;border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px;">' +
       '<div style="flex-shrink:0;width:24px;height:24px;border-radius:6px;background:' + color + '18;border:1px solid ' + color + '33;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:' + color + ';font-family:DM Mono,monospace;">' + (i+1) + '</div>' +
@@ -2780,7 +2777,7 @@ function rs_showResult(data) {
       '<div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:#fff;letter-spacing:0.04em;line-height:1.1;">' + title + '</div>' +
     '</div>' +
 
-    '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:10px;">SCRIPT POINTS — FILM EACH ONE, CUT BETWEEN</div>' +
+    '<div style="font-size:10px;font-family:DM Mono,monospace;letter-spacing:0.15em;text-transform:uppercase;color:#555;margin-bottom:10px;">SCRIPT — ONE CUT PER POINT  ·  0s ZOOM → 2s B1 → 4s B2 → 6s DOSE/STUDY → 8s CTA</div>' +
     pointsHTML +
 
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;margin-bottom:16px;">' +
