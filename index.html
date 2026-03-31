@@ -2644,7 +2644,7 @@ async function rs_doSearch() {
     });
 
     const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
+    if (!response.ok || data.error) throw new Error(typeof data.error === 'string' ? data.error : (data.error && data.error.message) || 'Request failed (' + response.status + ')');
 
     const parsed = data;
     parsed._supplement = supp;
@@ -2680,64 +2680,6 @@ async function rs_doSearch() {
     rs_setLoading(false);
     rs_showError(err.message);
   }
-}
-
-function rs_buildPrompt(supp, focus) {
-  const focusMap = {
-    performance: 'athletic performance, strength, power output, endurance, sprint speed',
-    recovery: 'muscle recovery, soreness reduction, inflammation markers, repair and adaptation',
-    sleep: 'sleep quality, sleep duration, sleep onset latency, circadian rhythm, deep sleep',
-    cognitive: 'cognitive function, focus, reaction time, mental clarity, brain health',
-    general: 'general health benefits, longevity, biomarker improvement',
-    all: 'all evidence including performance, recovery, cognitive, and health outcomes'
-  };
-  const focusDesc = focusMap[focus] || 'all evidence';
-
-  return `Search PubMed and global sports science literature for the highest-quality peer-reviewed studies on "${supp}" related to ${focusDesc}.
-
-STRICT QUALITY REQUIREMENTS — only include studies that meet ALL of these:
-1. Randomised Controlled Trial (RCT) or high-quality systematic review/meta-analysis of RCTs
-2. Human subjects only — no animal or in-vitro studies
-3. Sample size of at least 15 participants
-4. Contains specific measurable quantitative outcomes (%, kg, seconds, mg/dL, etc.)
-5. Published in a reputable peer-reviewed journal
-6. Must have a real PubMed ID (PMID) or DOI
-
-PREFERRED JOURNALS (but not limited to): JISSN (Journal of the International Society of Sports Nutrition), Nutrients, American Journal of Clinical Nutrition, European Journal of Sport Science, International Journal of Sport Nutrition and Exercise Metabolism (IJSNEM), Journal of Strength and Conditioning Research, Medicine & Science in Sports & Exercise, British Journal of Sports Medicine, Sports Medicine.
-
-GLOBAL SCOPE: Include studies from any country — Australia (AIS, universities), USA, UK, Europe, Japan, Brazil, Scandinavia. Do not restrict to US sources.
-
-EXCLUDE: opinion pieces, narrative reviews without data, industry-funded studies with no independent replication, case studies, studies with fewer than 15 participants, animal studies.
-
-Return this exact JSON (no markdown, no backticks, raw JSON only):
-{
-  "supplement": "${supp}",
-  "overview": "2-3 sentence plain English summary of the current evidence consensus",
-  "evidence_grade": "A — Strong RCT evidence / B — Good evidence with some limitations / C — Emerging evidence / D — Limited or mixed evidence",
-  "safety_rating": "Safe / Generally Safe / Use With Caution / Limited Data",
-  "common_dose": "Evidence-based dose range e.g. 3-5g daily",
-  "best_timing": "Evidence-based timing e.g. Post-training with carbohydrates",
-  "athlete_relevance": "1-2 sentences specifically on performance or recovery relevance for competitive athletes",
-  "video_hook": "A punchy 1-sentence hook for a 30-second social media video. Myth-bust or surprising stat. Athlete framing — 'I found out...' or 'The research shows...' not nutritionist voice.",
-  "script_insight": "The single most surprising or counterintuitive measurable finding — written as an athlete sharing what they learned. Include the actual number/stat.",
-  "studies": [
-    {
-      "title": "Full exact study title",
-      "authors": "First author surname et al.",
-      "institution": "Lead institution and country e.g. University of Queensland, Australia",
-      "journal": "Full journal name",
-      "year": 2022,
-      "study_type": "RCT / Meta-analysis / Systematic Review",
-      "sample_size": 30,
-      "key_finding": "1-2 sentence plain English summary of the primary outcome with the actual measured result",
-      "stat_highlight": "The single most compelling specific number — e.g. '23% increase in peak power output' or '2.1kg more lean mass gained'",
-      "why_high_quality": "1 sentence explaining what makes this study credible — sample size, blinding, duration, etc.",
-      "pubmed_url": "https://pubmed.ncbi.nlm.nih.gov/[REAL PMID]/",
-      "doi": "https://doi.org/[DOI if available]",
-      "hook_line": "One sentence video hook built around this study's specific measurable finding"
-    }
-  ]
-}`;
 }
 
 // ── UI STATES ──────────────────────────────────────────
@@ -2860,39 +2802,6 @@ function rs_showResult(data) {
     '</div>';
 
   window._currentData = data;
-}
-
-function rs_copyStudy(btn, idx) {
-  const s = (window._currentStudies || [])[idx];
-  if (!s) return;
-  const text = `Hook: "${s.hook_line}"\nFinding: ${s.key_finding}\nStat: ${s.stat_highlight}\nLink: ${s.pubmed_url}`;
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = 'Copied ✓';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy hook'; btn.classList.remove('copied'); }, 2000);
-  });
-}
-
-function rs_copyLink(btn, url) {
-  if (!url) return;
-  navigator.clipboard.writeText(url).then(() => {
-    btn.textContent = 'Copied ✓';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy link'; btn.classList.remove('copied'); }, 2000);
-  });
-}
-
-function rs_copyAllHooks() {
-  const d = window._currentData;
-  if (!d) return;
-  const lines = [
-    `SUPPLEMENT: ${d.supplement}`,
-    `MAIN HOOK: "${d.video_hook}"`,
-    `SCRIPT INSIGHT: ${d.script_insight}`,
-    '',
-    ...(d.studies || []).map((s, i) => `Study ${i+1} Hook: "${s.hook_line}"\nLink: ${s.pubmed_url}`)
-  ].join('\n');
-  navigator.clipboard.writeText(lines);
 }
 
 </script>
